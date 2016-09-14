@@ -1,0 +1,456 @@
+contract ContractNameRegistry
+{
+    address owner;
+    mapping(bytes32 => address) nameRegistry;
+    
+    // Owner is defined
+    function ContractNameRegistry()
+    {
+        owner = msg.sender;
+    }
+    
+    modifier onlyOwner()
+    {
+        if(msg.sender != owner)
+        {
+            throw;
+        }
+    }
+    
+    // Whenever a contract is deployed, it is registered with ContractNameRegistry first
+    function addContractName(bytes32 name, address contractAddress) onlyOwner returns (bool response)
+    {
+        nameRegistry[name] = contractAddress;
+        return true;
+    }
+    
+    // On removing a contract
+    function removeContractName(bytes32 name) onlyOwner returns (bool response)
+    {
+        nameRegistry[name] = 0;
+        return true;
+    }
+    
+    // Other contracts will call this function to get addresses of needed contracts
+    function getContractAddressFromName(bytes32 name) returns (address contractAddress)
+    {
+        if(nameRegistry[name] == 0)
+        {
+            throw;
+        }
+        
+        return nameRegistry[name];
+    }
+}
+
+
+contract ContractNameRegistrySetter
+{
+    address contractNameRegistry;
+    
+    modifier onlyRegistry()
+    {
+        if(msg.sender != contractNameRegistry)
+        {
+            throw;
+        }
+    }
+    
+    // Only contractNameRegistry can set up a new registry
+    function setContractNameRegistry(address newNameRegistry) onlyRegistry returns (bool response)
+    {
+        contractNameRegistry = newNameRegistry;
+        return true;
+    }
+}
+
+contract ActionDb is ContractNameRegistrySetter {
+
+    mapping (bytes32 => address) public actions;
+    bytes32 actionManagerName = "ActionManager";
+
+
+    function ActionDB(address nameRegistry)
+    {
+    	contractNameRegistry = nameRegistry;
+
+    	// Very Important to create an AddActionContract
+    	var addaction = new ActionAddAction(contractNameRegistry);
+
+    	actions["addaction"] = address(addaction);
+    }
+
+    modifier onlyActionManager()
+    {
+    	address actionManager = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionManagerName);
+
+    	if(actionManager = 0x0)
+    	{
+    		throw;
+    	}
+
+    	if(msg.sender != actionManager)
+    	{
+    		throw;
+    	}
+    }
+
+
+    function addAction(bytes32 name, address addr) onlyActionManager returns (bool) {
+        
+        actions[name] = addr;
+        return true;
+    }
+
+    function removeAction(bytes32 name) onlyActionManager returns (bool) {
+        if (actions[name] == 0x0){
+            throw;
+        }
+        
+        actions[name] = 0x0;
+        return true;
+    }
+
+}
+
+// The action manager
+contract ActionManager is ContractNameRegistrySetter{
+
+	function ActionManager(address nameRegistry)
+	{
+		contractNameRegistry = nameRegistry;
+	}
+
+  mapping (bytes32 => address) actions;
+
+  function execute(bytes32 actionName, bytes data) returns (bool) {
+    address action = actions[actionName];
+   
+    if (action == 0x0){
+      throw
+    }
+    
+    action.execute(data);
+    return true;
+  }
+
+  // Add a new action.
+  function addAction(bytes32 name, address addr) {
+    actions[name] = addr;
+  }
+
+  // Remove an action.
+  function removeAction(bytes32 name) constant returns (bool) {
+    if (actions[name] == 0x0){
+      return false;
+    }
+    actions[name] = 0x0;
+    return true;
+  }
+
+}
+
+contract BankDB is ContractNameRegistrySetter
+{
+    mapping (address => uint) balances;
+    bytes32 actionDepositContractName = "ActionDeposit";
+    bytes32 actionWithdrawContractName = "ActionWithdraw";
+    
+    function BankDB(address nameRegistry)
+    {
+        contractNameRegistry = nameRegistry;
+    }
+    
+    // Here we are directly verifying from ContractNameRegistry, but we could also have have a permissions contract which maintains the permission for each contract to call other contracts.
+    function deposit(address customer) returns (bool response)
+    {
+    	address actionDeposit = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionDepositContractName);
+
+    	if(actionDeposit = 0x0)
+    	{
+    		throw;
+    	}
+
+    	if(msg.sender != actionDeposit)
+    	{
+    		throw;
+    	}
+
+        balances[customer] += msg.value;
+        return true;
+    }
+    
+    function withdraw(address customer, uint amount) returns (bool response)
+    {
+
+    	address actionWithdraw = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionWithdrawContractName);
+
+    	if(actionWithdraw = 0x0)
+    	{
+    		throw;
+    	}
+
+    	if(msg.sender != actionWithdraw)
+    	{
+    		throw;
+    	}
+
+        if(balances[customer] < amount)
+        {
+            throw;
+        }
+        
+        balances[customer] -= amount;
+        
+        if(!msg.sender.send(amount))
+        {
+            throw;
+        }
+        
+        return true;
+    }
+}
+
+
+contract ActionAddAction is ContractNameRegistrySetter {
+
+	bytes32 actionDBName = "ActionDB";
+
+	function ActionAddAction(address nameRegistry)
+	{
+		contractNameRegistry = nameRegistry;
+	}
+
+	modifier onlyActionManager()
+    {
+    	address actionManager = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionManagerName);
+
+    	if(actionManager = 0x0)
+    	{
+    		throw;
+    	}
+
+    	if(msg.sender != actionManager)
+    	{
+    		throw;
+    	}
+    }
+
+    function execute(bytes32 name, address addr) onlyActionManager returns (bool) {
+        
+        address actionDB = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionDBName);
+
+    	if(actionDB = 0x0)
+    	{
+    		throw;
+    	}
+        
+        return ActionDb(adb).addAction(name, addr);
+    }
+
+}
+
+// Remove action. Does not allow 'addaction' to be removed
+contract ActionRemoveAction is ContractNameRegistrySetter {
+
+	
+	bytes32 actionDBName = "ActionDB";
+
+	function ActionRemoveAction(address nameRegistry)
+	{
+		contractNameRegistry = nameRegistry;
+	}
+
+	modifier onlyActionManager()
+    {
+    	address actionManager = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionManagerName);
+
+    	if(actionManager = 0x0)
+    	{
+    		throw;
+    	}
+
+    	if(msg.sender != actionManager)
+    	{
+    		throw;
+    	}
+    }
+
+    function execute(bytes32 name) onlyActionManager returns (bool) {
+        
+        address actionDB = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionDBName);
+
+    	if(actionDB = 0x0)
+    	{
+    		throw;
+    	}
+        
+        if(name == "addaction"){
+          throw;
+        }
+
+        return ActionDb(adb).removeAction(name);
+    }
+
+}
+
+// Add contract.
+contract ActionAddContract is ContractNameRegistrySetter {
+
+	bytes32 actionDBName = "ActionDB";
+
+	function ActionAddContract(address nameRegistry)
+	{
+		contractNameRegistry = nameRegistry;
+	}
+
+	modifier onlyActionManager()
+    {
+    	address actionManager = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionManagerName);
+
+    	if(actionManager = 0x0)
+    	{
+    		throw;
+    	}
+
+    	if(msg.sender != actionManager)
+    	{
+    		throw;
+    	}
+    }
+
+
+    function execute(bytes32 name, address addr) onlyActionManager returns (bool) {
+
+        ContractNameRegistry cnr = ContractNameRegistry(contractNameRegistry);
+        return cnr.addContract(name,addr);
+    }
+
+}
+
+// Remove contract.
+contract ActionRemoveContract is ContractNameRegistrySetter {
+
+	function ActionRemoveContract(address nameRegistry)
+	{
+		contractNameRegistry = nameRegistry;
+	}
+
+	modifier onlyActionManager()
+    {
+    	address actionManager = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionManagerName);
+
+    	if(actionManager = 0x0)
+    	{
+    		throw;
+    	}
+
+    	if(msg.sender != actionManager)
+    	{
+    		throw;
+    	}
+    }
+
+
+    function execute(bytes32 name) onlyActionManager returns (bool) {
+
+        ContractNameRegistry cnr = ContractNameRegistry(contractNameRegistry);
+        return cnr.removeContract(name);
+    }
+
+}
+
+
+contract ActionDeposit is ContractNameRegistrySetter {
+
+	bytes32 bankDBContractName = "BankDB";	
+
+   function ActionDeposit(address nameRegistry)
+	{
+		contractNameRegistry = nameRegistry;
+	}
+
+	modifier onlyActionManager()
+    {
+    	address actionManager = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionManagerName);
+
+    	if(actionManager = 0x0)
+    	{
+    		throw;
+    	}
+
+    	if(msg.sender != actionManager)
+    	{
+    		throw;
+    	}
+    }
+
+
+    function execute(address customer) onlyActionManager returns (bool) {
+
+        address bankDBAddress = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(bankDBContractName);
+        
+        if(bankDBAddress == 0x0)
+        {
+            throw;
+        }
+        
+        bool result = BankDB(bankDBAddress).deposit.value(msg.value)(customer);
+        
+        if(!result)
+        {
+            throw;
+        }
+        
+        return true;
+
+    }
+
+}
+
+contract ActionWithdraw is ContractNameRegistrySetter {
+
+    bytes32 bankDBContractName = "BankDB";	
+
+   function ActionWithdraw(address nameRegistry)
+	{
+		contractNameRegistry = nameRegistry;
+	}
+
+	modifier onlyActionManager()
+    {
+    	address actionManager = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(actionManagerName);
+
+    	if(actionManager = 0x0)
+    	{
+    		throw;
+    	}
+
+    	if(msg.sender != actionManager)
+    	{
+    		throw;
+    	}
+    }
+
+
+    function execute(address customer, uint amount) onlyActionManager returns (bool) {
+
+        address bankDBAddress = ContractNameRegistry(contractNameRegistry).getContractAddressFromName(bankDBContractName);
+        
+        if(bankDBAddress == 0x0)
+        {
+            throw;
+        }
+        
+        bool result = BankDB(bankDBAddress).withdraw(customer, amount);
+        
+        if(!result)
+        {
+            throw;
+        }
+        
+        return true;
+
+    }
+
+}
