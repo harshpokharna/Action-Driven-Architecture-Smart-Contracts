@@ -5,7 +5,7 @@ Previously [here](https://github.com/harshpokharna/The-5-Types-Model-Simple-Bank
 
 In short, this diagram explains the 5 types model architecture
 
-![Alt text](https://github.com/harshpokharna/Action-Driven-Architecture-Smart-Contracts/blob/master/res/action_driven_arch.png "Architecture for 5 types model")
+![Alt text](https://github.com/harshpokharna/Action-Driven-Architecture-Smart-Contracts/blob/master/res/application_flow.png "Architecture for 5 types model")
 
 And we had a ContractNameRegistry Service which stored the addresses for all the contracts
 
@@ -40,5 +40,4 @@ Thus
 To have a more sophesticated permissioning model:
 - There can be a UserPermissionDB which stores permissions for outside users to control access to ActionManager. Whenever there is a call from outside, ActionManager can verify if the user has required permissions.
 - There can be a ActionPermissionDB which stores permissions for all the actions. Whenever a Database Contract gets a call, it can verify if that particular Action has permission to call it.
-- 
 
